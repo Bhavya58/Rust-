@@ -1,0 +1,75 @@
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write, Read};
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Task {
+    description: String,
+    done: bool,
+}
+
+fn load_tasks() -> Vec<Task> {
+    let mut file = File::open("tasks.json").unwrap_or_else(|_| File::create("tasks.json").unwrap());
+    let mut data = String::new();
+    file.read_to_string(&mut data).unwrap();
+    if data.is_empty() {
+        Vec::new()
+    } else {
+        serde_json::from_str(&data).unwrap()
+    }
+}
+
+fn save_tasks(tasks: &Vec<Task>) {
+    let data = serde_json::to_string_pretty(tasks).unwrap();
+    let mut file = OpenOptions::new().write(true).truncate(true).open("tasks.json").unwrap();
+    file.write_all(data.as_bytes()).unwrap();
+}
+
+fn main() {
+    loop {
+        println!("\n📌 Todo CLI");
+        println!("1. Add Task");
+        println!("2. View Tasks");
+        println!("3. Mark Task as Done");
+        println!("4. Exit");
+
+        let mut choice = String::new();
+        io::stdin().read_line(&mut choice).unwrap();
+        let choice = choice.trim();
+
+        let mut tasks = load_tasks();
+
+        match choice {
+            "1" => {
+                println!("Enter task description:");
+                let mut desc = String::new();
+                io::stdin().read_line(&mut desc).unwrap();
+                let task = Task { description: desc.trim().to_string(), done: false };
+                tasks.push(task);
+                save_tasks(&tasks);
+                println!("✅ Task added!");
+            }
+            "2" => {
+                println!("\nYour Tasks:");
+                for (i, task) in tasks.iter().enumerate() {
+                    let status = if task.done { "✔" } else { "❌" };
+                    println!("{}. {} [{}]", i + 1, task.description, status);
+                }
+            }
+            "3" => {
+                println!("Enter task number to mark as done:");
+                let mut num = String::new();
+                io::stdin().read_line(&mut num).unwrap();
+                if let Ok(i) = num.trim().parse::<usize>() {
+                    if i > 0 && i <= tasks.len() {
+                        tasks[i - 1].done = true;
+                        save_tasks(&tasks);
+                        println!("🎉 Task marked as done!");
+                    }
+                }
+            }
+            "4" => break,
+            _ => println!("Invalid choice, try again!"),
+        }
+    }
+}
