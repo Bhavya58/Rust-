@@ -1,0 +1,103 @@
+cargo new book_api
+cd book_api
+
+
+[package]
+name = "book_api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1", features = ["v4"] }
+
+
+
+
+
+
+
+
+
+use actix_web::{get, post, put, delete, web, App, HttpServer, Responder, HttpResponse};
+use serde::{Serialize, Deserialize};
+use std::sync::Mutex;
+use uuid::Uuid;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Book {
+    id: String,
+    title: String,
+    author: String,
+}
+
+struct AppState {
+    books: Mutex<Vec<Book>>,
+}
+
+#[post("/books")]
+async fn add_book(data: web::Data<AppState>, book: web::Json<Book>) -> impl Responder {
+    let mut books = data.books.lock().unwrap();
+    let mut new_book = book.into_inner();
+    new_book.id = Uuid::new_v4().to_string();
+    books.push(new_book.clone());
+    HttpResponse::Ok().json(new_book)
+}
+
+#[get("/books")]
+async fn list_books(data: web::Data<AppState>) -> impl Responder {
+    let books = data.books.lock().unwrap();
+    HttpResponse::Ok().json(books.clone())
+}
+
+#[put("/books/{id}")]
+async fn update_book(path: web::Path<String>, data: web::Data<AppState>, book: web::Json<Book>) -> impl Responder {
+    let mut books = data.books.lock().unwrap();
+    let id = path.into_inner();
+    for b in books.iter_mut() {
+        if b.id == id {
+            b.title = book.title.clone();
+            b.author = book.author.clone();
+            return HttpResponse::Ok().json(b.clone());
+        }
+    }
+    HttpResponse::NotFound().body("Book not found")
+}
+
+#[delete("/books/{id}")]
+async fn delete_book(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let mut books = data.books.lock().unwrap();
+    let id = path.into_inner();
+    let len_before = books.len();
+    books.retain(|b| b.id != id);
+    if books.len() < len_before {
+        HttpResponse::Ok().body("Book deleted")
+    } else {
+        HttpResponse::NotFound().body("Book not found")
+    }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let data = web::Data::new(AppState { books: Mutex::new(Vec::new()) });
+
+    HttpServer::new(move || {
+        App::new()
+            .app_data(data.clone())
+            .service(add_book)
+            .service(list_books)
+            .service(update_book)
+            .service(delete_book)
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
+
+
+
+
+
+
